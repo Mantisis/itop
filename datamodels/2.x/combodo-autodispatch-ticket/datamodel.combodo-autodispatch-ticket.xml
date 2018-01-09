@@ -1,0 +1,498 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<itop_design xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.4">
+    <classes>
+        <class id="DispatchRule" _delta="define">
+            <properties>
+                <category>bizmodel,searchable</category>
+                <abstract>false</abstract>
+                <db_table>dispatchrule</db_table>
+                <naming>
+                    <attributes>
+                        <attribute id="name"/>
+                    </attributes>
+                </naming>
+                <reconciliation>
+                    <attributes>
+                        <attribute id="class"/>
+                        <attribute id="name"/>
+                        <attribute id="target_att"/>
+                    </attributes>
+                </reconciliation>
+            </properties>
+            <fields>
+                <field id="name" xsi:type="AttributeString">
+                    <sql>name</sql>
+                    <default_value/>
+                    <is_null_allowed>false</is_null_allowed>
+                    <validation_pattern/>
+                </field>
+                <field id="class" xsi:type="AttributeString">
+                    <sql>class</sql>
+                    <default_value>Ticket</default_value>
+                    <is_null_allowed>false</is_null_allowed>
+                    <validation_pattern/>
+                </field>
+                <field id="target_att" xsi:type="AttributeString">
+                    <sql>target_att</sql>
+                    <default_value>team_id</default_value>
+                    <is_null_allowed>false</is_null_allowed>
+                    <validation_pattern/>
+                </field>
+                <field id="explain_log_att" xsi:type="AttributeString">
+                    <sql>explain_log_att</sql>
+                    <default_value/>
+                    <is_null_allowed>true</is_null_allowed>
+                    <validation_pattern/>
+                </field>
+                <field id="disabled_contexts" xsi:type="AttributeString">
+                    <sql>disabled_contexts</sql>
+                    <default_value/>
+                    <is_null_allowed>true</is_null_allowed>
+                    <validation_pattern/>
+                </field>
+                <field id="staterules_list" xsi:type="AttributeLinkedSet">
+                    <linked_class>StateRule</linked_class>
+                    <ext_key_to_me>dispatchrule_id</ext_key_to_me>
+                    <tracking_level/>
+                    <edit_mode>in_place</edit_mode>
+                </field>
+                <field id="teamrules_list" xsi:type="AttributeLinkedSet">
+                    <linked_class>TeamRule</linked_class>
+                    <ext_key_to_me>dispatchrule_id</ext_key_to_me>
+                    <tracking_level/>
+                    <edit_mode>in_place</edit_mode>
+                </field>
+            </fields>
+            <methods>
+                <method id="DisplayBareRelations">
+                    <comment>/**
+                        * Add an extra tab to simulate rules matching
+                        * @see cmdbAbstractObject::DisplayBareRelations()
+                        */</comment>
+                    <static>false</static>
+                    <access>public </access>
+                    <code><![CDATA[	public function DisplayBareRelations(WebPage $oPage, $bEditMode = false)
+	{
+		parent::DisplayBareRelations($oPage, $bEditMode);
+
+		if(!$bEditMode)
+		{
+		    //$oPage->SetCurrentTab(Dict::S('AutoDispatch:Simulator:Tab:Title'));
+		    //$oPage->add('<div id="testgla">Simulateur à faire. Ben oui, vous ne pensiez pas que ca serait déjà là hein ? :)</div>');
+		}
+	}]]></code>
+                </method>
+                <method id="DoCheckToWrite">
+                    <static>false</static>
+                    <access>public </access>
+                    <code><![CDATA[    public function DoCheckToWrite()
+	{
+		parent::DoCheckToWrite();
+
+		// Checking class / attributes consistency with Datamodel
+		$sClass = $this->Get('class');
+		$sTargetAttCode = $this->Get('target_att');
+		$sExplainLogAttCode = $this->Get('explain_log_att');
+		// - Class
+		if(!MetaModel::IsValidClass($sClass))
+		{
+		    $this->m_aCheckIssues[] = Dict::Format('Class:DispatchRule/Error:ClassNotValid', $sClass);
+		}
+		// - Target attribute
+		if(!MetaModel::IsValidAttCode($sClass, $sTargetAttCode))
+		{
+		    $this->m_aCheckIssues[] = Dict::Format('Class:DispatchRule/Error:AttributeNotValid', $sClass, $sTargetAttCode);
+		}
+		// - Explain log attribute
+		if( ($sExplainLogAttCode !== null) && ($sExplainLogAttCode !== '') && !MetaModel::IsValidAttCode($sClass, $sExplainLogAttCode))
+		{
+		    $this->m_aCheckIssues[] = Dict::Format('Class:DispatchRule/Error:AttributeNotValid', $sClass, $sExplainLogAttCode);
+		}
+	}]]></code>
+                </method>
+            <method id="IsEnabledInContext">
+                <static>false</static>
+                <access>public </access>
+                <code><![CDATA[    public function IsEnabledInContext()
+	{
+	    $bEnabled = true;
+
+		$aDisabledContexts = explode(',', $this->Get('disabled_contexts'));
+		foreach(ContextTag::GetStack() as $sContext)
+        {
+            if(in_array($sContext, $aDisabledContexts))
+            {
+                $bEnabled = false;
+                break;
+            }
+        }
+
+		return $bEnabled;
+	}]]></code>
+            </method>
+        </methods>
+            <presentation>
+                <list>
+                    <items>
+                        <item id="class">
+                            <rank>10</rank>
+                        </item>
+                        <item id="target_att">
+                            <rank>20</rank>
+                        </item>
+                        <item id="disabled_contexts">
+                            <rank>30</rank>
+                        </item>
+                    </items>
+                </list>
+                <search>
+                    <items>
+                        <item id="name">
+                            <rank>10</rank>
+                        </item>
+                        <item id="class">
+                            <rank>20</rank>
+                        </item>
+                        <item id="target_att">
+                            <rank>30</rank>
+                        </item>
+                        <item id="explain_log_att">
+                            <rank>40</rank>
+                        </item>
+                        <item id="disabled_contexts">
+                            <rank>50</rank>
+                        </item>
+                    </items>
+                </search>
+                <details>
+                    <items>
+                        <item id="col:col0">
+                            <items>
+                                <item id="name">
+                                    <rank>10</rank>
+                                </item>
+                                <item id="class">
+                                    <rank>20</rank>
+                                </item>
+                                <item id="target_att">
+                                    <rank>30</rank>
+                                </item>
+                                <item id="explain_log_att">
+                                    <rank>40</rank>
+                                </item>
+                                <item id="disabled_contexts">
+                                    <rank>50</rank>
+                                </item>
+                            </items>
+                            <rank>10</rank>
+                        </item>
+                        <item id="staterules_list">
+                            <rank>20</rank>
+                        </item>
+                        <item id="teamrules_list">
+                            <rank>30</rank>
+                        </item>
+                    </items>
+                </details>
+            </presentation>
+            <parent>cmdbAbstractObject</parent>
+        </class>
+        <class id="TeamRule" _delta="define">
+            <properties>
+                <category>bizmodel,searchable</category>
+                <abstract>false</abstract>
+                <db_table>teamrule</db_table>
+                <naming>
+                    <attributes>
+                        <attribute id="name"/>
+                    </attributes>
+                </naming>
+                <reconciliation>
+                    <attributes>
+                        <attribute id="dispatchrule_id"/>
+                        <attribute id="name"/>
+                    </attributes>
+                </reconciliation>
+            </properties>
+            <fields>
+                <field id="dispatchrule_id" xsi:type="AttributeExternalKey">
+                    <sql>dispatchrule_id</sql>
+                    <filter/>
+                    <dependencies/>
+                    <is_null_allowed>false</is_null_allowed>
+                    <target_class>DispatchRule</target_class>
+                    <on_target_delete>DEL_AUTO</on_target_delete>
+                </field>
+                <field id="name" xsi:type="AttributeString">
+                    <sql>name</sql>
+                    <default_value/>
+                    <is_null_allowed>false</is_null_allowed>
+                    <validation_pattern/>
+                </field>
+                <field id="oql" xsi:type="AttributeOQL">
+                    <sql>oql</sql>
+                    <default_value/>
+                    <is_null_allowed>false</is_null_allowed>
+                    <width/>
+                    <height/>
+                </field>
+                <field id="coveragewindow_id" xsi:type="AttributeExternalKey">
+                    <sql>coveragewindow_id</sql>
+                    <filter/>
+                    <dependencies/>
+                    <is_null_allowed>true</is_null_allowed>
+                    <target_class>CoverageWindow</target_class>
+                    <on_target_delete>DEL_AUTO</on_target_delete>
+                </field>
+                <field id="rank" xsi:type="AttributeInteger">
+                    <sql>rank</sql>
+                    <default_value>1</default_value>
+                    <is_null_allowed>false</is_null_allowed>
+                </field>
+                <field id="active" xsi:type="AttributeEnum">
+                    <sql>active</sql>
+                    <values>
+                        <value id="yes">yes</value>
+                        <value id="no">no</value>
+                    </values>
+                    <default_value>yes</default_value>
+                    <is_null_allowed>false</is_null_allowed>
+                    <display_style>list</display_style>
+                    <dependencies/>
+                </field>
+            </fields>
+            <methods/>
+            <presentation>
+                <list>
+                    <items>
+                        <item id="dispatchrule_id">
+                            <rank>10</rank>
+                        </item>
+                        <item id="oql">
+                            <rank>20</rank>
+                        </item>
+                        <item id="coveragewindow_id">
+                            <rank>30</rank>
+                        </item>
+                        <item id="rank">
+                            <rank>40</rank>
+                        </item>
+                        <item id="active">
+                            <rank>50</rank>
+                        </item>
+                    </items>
+                </list>
+                <search>
+                    <items>
+                        <item id="dispatchrule_id">
+                            <rank>10</rank>
+                        </item>
+                        <item id="name">
+                            <rank>20</rank>
+                        </item>
+                        <item id="oql">
+                            <rank>30</rank>
+                        </item>
+                        <item id="coveragewindow_id">
+                            <rank>40</rank>
+                        </item>
+                        <item id="rank">
+                            <rank>50</rank>
+                        </item>
+                        <item id="active">
+                            <rank>60</rank>
+                        </item>
+                    </items>
+                </search>
+                <details>
+                    <items>
+                        <item id="col:col0">
+                            <items>
+                                <item id="dispatchrule_id">
+                                    <rank>10</rank>
+                                </item>
+                                <item id="name">
+                                    <rank>20</rank>
+                                </item>
+                                <item id="oql">
+                                    <rank>30</rank>
+                                </item>
+                                <item id="coveragewindow_id">
+                                    <rank>40</rank>
+                                </item>
+                            </items>
+                            <rank>10</rank>
+                        </item>
+                        <item id="col:col1">
+                            <items>
+                                <item id="rank">
+                                    <rank>10</rank>
+                                </item>
+                                <item id="active">
+                                    <rank>20</rank>
+                                </item>
+                            </items>
+                            <rank>20</rank>
+                        </item>
+                    </items>
+                </details>
+            </presentation>
+            <parent>cmdbAbstractObject</parent>
+        </class>
+        <class id="StateRule" _delta="define">
+            <properties>
+                <category>bizmodel,searchable</category>
+                <abstract>false</abstract>
+                <db_table>staterule</db_table>
+                <reconciliation>
+                    <attributes>
+                        <attribute id="dispatchrule_id"/>
+                        <attribute id="reaching_state_code"/>
+                    </attributes>
+                </reconciliation>
+                <naming>
+                    <attributes>
+                        <attribute id="dispatchrule_id_friendlyname"/>
+                        <attribute id="reaching_state_code"/>
+                    </attributes>
+                </naming>
+            </properties>
+            <fields>
+                <field id="dispatchrule_id" xsi:type="AttributeExternalKey">
+                    <sql>dispatchrule_id</sql>
+                    <filter/>
+                    <dependencies/>
+                    <is_null_allowed>false</is_null_allowed>
+                    <target_class>DispatchRule</target_class>
+                    <on_target_delete>DEL_AUTO</on_target_delete>
+                </field>
+                <field id="reaching_state_code" xsi:type="AttributeString">
+                    <sql>reaching_state_code</sql>
+                    <default_value/>
+                    <is_null_allowed>false</is_null_allowed>
+                    <validation_pattern/>
+                </field>
+                <field id="stimulus_code" xsi:type="AttributeString">
+                    <sql>stimulus_code</sql>
+                    <default_value/>
+                    <is_null_allowed>true</is_null_allowed>
+                    <validation_pattern/>
+                </field>
+            </fields>
+            <methods>
+                <method id="DoCheckToWrite">
+                    <static>false</static>
+                    <access>public </access>
+                    <code><![CDATA[	public function DoCheckToWrite()
+	{
+	    parent::DoCheckToWrite();
+
+        $sSRClass = get_class($this);
+
+        // Retrieving values for easier manipulation
+        $iDRId = $this->Get('dispatchrule_id');
+        $sReachingStateCode = $this->Get('reaching_state_code');
+        $sStimulusCode = $this->Get('stimulus_code');
+
+        // Retrieving DispatchRule
+        $oDRAttDef = MetaModel::GetAttributeDef($sSRClass, 'dispatchrule_id');
+        $oDispatchRule = MetaModel::GetObject($oDRAttDef->GetTargetClass(), $iDRId);
+        $sTOClass = $oDispatchRule->Get('class');
+        $sDRFriendlyname = $oDispatchRule->Get('friendlyname');
+
+        // Checking if already one StateRule for this DispatchRule / state
+        // - Building StateRule search
+        $oSearch = DBObjectSearch::FromOQL('SELECT StateRule AS SR WHERE SR.dispatchrule_id = :dispatchrule_id AND SR.reaching_state_code = :reaching_state_code AND SR.id != :this->id');
+        $aSearchParams = array(
+            'this' => $this,
+            'dispatchrule_id' => $iDRId,
+            'reaching_state_code' => $sReachingStateCode,
+        );
+        $oSet = new DBObjectSet($oSearch, array(), $aSearchParams);
+        // - Testing if found one
+        if($oSet->Count() > 0)
+        {
+
+            // Note: We don't try to retrieve state label because it would failed if the DispatchRule is configured on an abstract class
+            $this->m_aCheckIssues[] = Dict::Format('Class:StateRule/Error:ObjectNotUnique', $sSRClass, $sDRFriendlyname, $sReachingStateCode);
+        }
+
+        // Checking is stimulus are valid in state (only for none abstract class)
+        if(!MetaModel::IsAbstract($sTOClass))
+        {
+            $aStates = MetaModel::EnumStates($sTOClass);
+            $aTransitions = MetaModel::EnumTransitions($sTOClass, $sReachingStateCode);
+
+            // For state code
+            if(!array_key_exists($sReachingStateCode, $aStates))
+            {
+                $this->m_aCheckIssues[] = Dict::Format('Class:StateRule/Error:StateNotValid', $sSRClass, $sReachingStateCode, $sTOClass);
+            }
+
+            // For stimulus to apply
+            if(!array_key_exists($sStimulusCode, $aTransitions))
+            {
+                $this->m_aCheckIssues[] = Dict::Format('Class:StateRule/Error:StimulusNotValid', $sSRClass, $sStimulusCode, $sReachingStateCode);
+            }
+        }
+	}]]></code>
+                </method>
+            </methods>
+            <presentation>
+                <list>
+                    <items>
+                        <item id="dispatchrule_id">
+                            <rank>10</rank>
+                        </item>
+                        <item id="reaching_state_code">
+                            <rank>20</rank>
+                        </item>
+                        <item id="stimulus_code">
+                            <rank>30</rank>
+                        </item>
+                    </items>
+                </list>
+                <search>
+                    <items>
+                        <item id="dispatchrule_id">
+                            <rank>10</rank>
+                        </item>
+                        <item id="reaching_state_code">
+                            <rank>20</rank>
+                        </item>
+                        <item id="stimulus_code">
+                            <rank>30</rank>
+                        </item>
+                    </items>
+                </search>
+                <details>
+                    <items>
+                        <item id="col:col0">
+                            <items>
+                                <item id="dispatchrule_id">
+                                    <rank>10</rank>
+                                </item>
+                                <item id="reaching_state_code">
+                                    <rank>20</rank>
+                                </item>
+                                <item id="stimulus_code">
+                                    <rank>30</rank>
+                                </item>
+                            </items>
+                            <rank>10</rank>
+                        </item>
+                    </items>
+                </details>
+            </presentation>
+            <parent>cmdbAbstractObject</parent>
+        </class>
+    </classes>
+    <menus>
+        <menu xsi:type="OQLMenuNode" id="DispatchRule" _delta="define">
+            <parent>ServiceManagement</parent>
+            <rank>15</rank>
+            <oql>SELECT DispatchRule</oql>
+            <do_search>1</do_search>
+        </menu>
+    </menus>
+</itop_design>
