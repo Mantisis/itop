@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<itop_design xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.0">
+  <classes>
+    <class id="Ticket" _created_in="itop-tickets" _delta="must_exist">
+      <methods>
+        <method id="DisplayBareRelations" _delta="define">
+          <code><![CDATA[ function DisplayBareRelations(WebPage $oPage, $bEditMode = false)
+  {
+    parent::DisplayBareRelations($oPage, $bEditMode);
+    // Display the impact analysis for tickets not in 'closed' or 'resolved' status... and not in edition
+    if ((!$bEditMode) && (!in_array($this->Get('status'), array('resolved', 'closed'))))
+    {
+      $oPage->add_linked_script(utils::GetAbsoluteUrlAppRoot().'js/fraphael.js');
+      $oPage->add_linked_stylesheet(utils::GetAbsoluteUrlAppRoot().'css/jquery.contextMenu.css');
+      $oPage->add_linked_script(utils::GetAbsoluteUrlAppRoot().'js/jquery.contextMenu.js');
+      $oPage->add_linked_script(utils::GetAbsoluteUrlAppRoot().'js/simple_graph.js');
+      $oPage->AddAjaxTab(Dict::S('Ticket:ImpactAnalysis'), utils::GetAbsoluteUrlAppRoot().'pages/ajax.render.php?operation=ticket_impact&class='.get_class($this).'&id='.$this->GetKey(), true);
+    }
+    
+    if(!$bEditMode)
+    {
+        $oPage->SetCurrentTab("Ticket du patient");
+        $iCallerID = $this->Get('caller_id');
+
+        $oTicketFromCallerSet = new CMDBObjectSet(DBObjectSearch::FromOQL("SELECT Ticket WHERE caller_id = $iCallerID"));
+
+        $iNumberTicket = $oTicketFromCallerSet->count();
+        if($iNumberTicket > 0) {
+          $oPage->SetCurrentTab(Dict::S('Class:Ticket:TicketFromClient')." (".$iNumberTicket.")");
+        }
+        else {
+          $oPage->SetCurrentTab(Dict::S('Class:Ticket:TicketFromClient'));
+        }
+        self::DisplaySet($oPage, $oTicketFromCallerSet, array ('menu' => false));
+    }
+  }]]></code>
+        </method>
+      </methods>
+    </class>
+  </classes>
+  <dictionaries>
+    <dictionary id="FR FR" _delta="must_exist">
+      <entries>
+        <entry id="Class:Ticket:TicketFromClient" _delta="define"><![CDATA[Ticket du patient]]></entry>
+      </entries>
+    </dictionary>
+  </dictionaries>
+</itop_design>

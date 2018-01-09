@@ -1,0 +1,821 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<itop_design xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.0">
+  <classes>
+    <class id="MailInboxBase" _created_in="combodo-email-synchro" _delta="must_exist">
+      <methods>
+        <method id="DisplayBareRelations" _delta="redefine">
+          <code><![CDATA[ function DisplayBareRelations(WebPage $oPage, $bEditMode = false)
+  {
+    parent::DisplayBareRelations($oPage, $bEditMode);
+    if (!$bEditMode)
+    {
+      $oPage->SetCurrentTab(Dict::S('MailInbox:MailboxContent'));
+      $sForm = Dict::Format('MailInbox:Display_X_eMailsStartingFrom_Y', '<input type="text" size="3" id="mailbox_count" value="10"/>', '<input type="text" size="3" id="mailbox_start_index" value="0"/>');
+      $oPage->add('<p><form onsubmit="return false;">'.$sForm.'&nbsp;<button type="submit" id="mailbox_content_refresh">'.Dict::S(Dict::S('UI:Button:Refresh')).'</button></form></p>');
+      $oPage->add('<div id="mailbox_content_output"></div>');
+      $sAjaxUrl = addslashes(utils::GetAbsoluteUrlModulesRoot().basename(dirname(__FILE__)).'/../ait-email-synchro-extended/ajax.php');
+      $iId = $this->GetKey();
+      $oPage->add_script(
+<<<EOF
+function MailboxUpdateActionButtons()
+{
+  if( $(".mailbox_item:checked").length > 0 )
+  {
+    $('.mailbox_button').prop('disabled', false);
+  }
+  else
+  {
+    $('.mailbox_button').prop('disabled', true);
+  }
+}
+
+function MailboxRefresh(data)
+{
+  $('#mailbox_content_output').html(data);
+  $('#mailbox_content_refresh').removeAttr('disabled');
+  $("#mailbox_content_output .listResults").tablesorter( { headers: { 0: {sorter: false}}, widgets: ['myZebra']} ); // sortable and zebra tables
+  $("#mailbox_checkall").click(function() {
+    var bChecked = $(this).prop('checked');
+    $(".mailbox_item").each(function() {
+      $(this).prop('checked', bChecked);
+    });
+    MailboxUpdateActionButtons();
+  });
+  $('.mailbox_button').prop('disabled', false);
+  $(".mailbox_item").bind('change', function() {
+    MailboxUpdateActionButtons();
+  });
+  $('#mailbox_reset_status').click(function() {
+    MailboxResetStatus();
+  });
+  $('#mailbox_delete_messages').click(function() {
+    MailboxDeleteMessages();
+  });
+  MailboxUpdateActionButtons();
+}
+
+function MailboxResetStatus()
+{
+  var aUIDLs = [];
+  $(".mailbox_item:checked").each(function() {
+    aUIDLs.push(this.value);
+  });
+
+  $('#mailbox_content_output').html('<img src="../images/indicator.gif"/>');
+  $('#mailbox_content_refresh').attr('disabled', 'disabled');
+  var iStart = $('#mailbox_start_index').val();
+  var iCount = $('#mailbox_count').val();
+
+  $.post('$sAjaxUrl', {operation: 'mailbox_reset_status', id: $iId, start: iStart, count: iCount, aUIDLs: aUIDLs }, function(data) {
+     MailboxRefresh(data);
+  });
+  return false;
+}
+
+function MailboxDeleteMessages()
+{
+  var aUIDLs = [];
+  $(".mailbox_item:checked").each(function() {
+    aUIDLs.push(this.value);
+  });
+
+  $('#mailbox_content_output').html('<img src="../images/indicator.gif"/>');
+  $('#mailbox_content_refresh').attr('disabled', 'disabled');
+  var iStart = $('#mailbox_start_index').val();
+  var iCount = $('#mailbox_count').val();
+
+  $.post('$sAjaxUrl', {operation: 'mailbox_delete_messages', id: $iId, start: iStart, count: iCount, aUIDLs: aUIDLs }, function(data) {
+     MailboxRefresh(data);
+  });
+  return false;
+}
+EOF
+      );
+      $oPage->add_ready_script(
+<<<EOF
+$('#mailbox_content_refresh').click(function() {
+
+  $('#mailbox_content_output').html('<img src="../images/indicator.gif"/>');
+  $('#mailbox_content_refresh').attr('disabled', 'disabled');
+  var iStart = $('#mailbox_start_index').val();
+  var iCount = $('#mailbox_count').val();
+
+  $.post('$sAjaxUrl', {operation: 'mailbox_content', id: $iId, start: iStart, count: iCount }, function(data) {
+    MailboxRefresh(data);
+  });
+
+  return false;
+});
+$('#mailbox_content_refresh').trigger('click');
+EOF
+      );
+    }
+  }]]></code>
+        </method>
+		<method id="AddAttachments" _delta="redefine">
+			<code><![CDATA[protected function AddAttachments(Ticket $oTicket, EmailMessage $oEmail, $bNoDuplicates = true, &$aIgnoredAttachments = array())
+	{
+		if (self::$iMinImageWidth === null)
+		{
+			$sMinImagesSize = MetaModel::GetModuleSetting('combodo-email-synchro', 'images_minimum_size','0x0');
+			if (preg_match('/^([0-9]+)x([0-9]+)$/i', $sMinImagesSize, $aMatches))
+			{
+				self::$iMinImageWidth = (int)$aMatches[1];
+				self::$iMinImageHeight = (int)$aMatches[2];
+				MailInboxesEmailProcessor::Trace("Info: minimum dimensions for attachment images: ".self::$iMinImageWidth."x".self::$iMinImageHeight." px. Images smaller than these dimensions will be ignored.");
+			}
+			else
+			{
+				MailInboxesEmailProcessor::Trace("Warning: incorrect format for the configuration value: 'images_minimum_size'. Expecting a value dddxddd (where ddd are digits), like 100x100, but got: '$sMinImagesSize'. No minimum value will be set.");
+			}
+		}
+		if (self::$iMaxImageWidth === null)
+		{
+			if (function_exists('imagecopyresampled'))
+			{
+				$sMaxImagesSize = MetaModel::GetModuleSetting('combodo-email-synchro', 'images_maximum_size', '');
+				if ($sMaxImagesSize != '')
+				{
+					if (preg_match('/^([0-9]+)x([0-9]+)$/i', $sMaxImagesSize, $aMatches))
+					{
+						self::$iMaxImageWidth = (int)$aMatches[1];
+						self::$iMaxImageHeight = (int)$aMatches[2];
+						MailInboxesEmailProcessor::Trace("Info: maximum dimensions for attachment images: ".self::$iMaxImageWidth."x".self::$iMaxImageHeight." px. Images bigger than these dimensions will be resized.");
+					}
+					else
+					{
+						MailInboxesEmailProcessor::Trace("Warning: incorrect format for the configuration value: 'images_maximum_size'. Expecting a value dddxddd (where ddd are digits), like 1000x1000, but got: '$sMaxImagesSize'. No maximum value will be set.");
+						self::$iMaxImageWidth = 0;
+					}
+				}
+				else
+				{
+					MailInboxesEmailProcessor::Trace("Info: no maximum dimensions configured for attachment images.");
+					self::$iMaxImageWidth = 0;
+				}
+			}
+			else
+			{
+				MailInboxesEmailProcessor::Trace("Info: GD not installed, cannot resize big images.");
+				self::$iMaxImageWidth = 0;
+			}
+			
+		}
+		$aAddedAttachments = array();
+		// Process attachments (if any)
+		$aPreviousAttachments = array();
+		$aRejectedAttachments = array();
+		if ($bNoDuplicates)
+		{
+			$sOQL = "SELECT Attachment WHERE item_class = :class AND item_id = :id";
+			$oAttachments = new DBObjectSet(DBObjectSearch::FromOQL($sOQL), array(), array('class' => get_class($oTicket), 'id' => $oTicket->GetKey()));
+			while($oPrevAttachment = $oAttachments->Fetch())
+			{
+				$oDoc = $oPrevAttachment->Get('contents');
+				$data = $oDoc->GetData();
+				$aPreviousAttachments[] = array(
+					'class' => 'Attachment',
+					'filename' => $oDoc->GetFileName(),
+					'mimeType' => $oDoc->GetMimeType(),
+					'size' => strlen($data),
+					'md5' => md5($data),
+					'object' => $oPrevAttachment,
+				);
+			}
+			// same processing for InlineImages
+			if (class_exists('InlineImage'))
+			{
+				$sOQL = "SELECT InlineImage WHERE item_class = :class AND item_id = :id";
+				$oAttachments = new DBObjectSet(DBObjectSearch::FromOQL($sOQL), array(), array('class' => get_class($oTicket), 'id' => $oTicket->GetKey()));
+				while($oPrevAttachment = $oAttachments->Fetch())
+				{
+					$oDoc = $oPrevAttachment->Get('contents');
+					$data = $oDoc->GetData();
+					$aPreviousAttachments[] = array(
+						'class' => 'InlineImage',
+						'filename' => $oDoc->GetFileName(),
+						'mimeType' => $oDoc->GetMimeType(),
+						'size' => strlen($data),
+						'md5' => md5($data),
+						'object' => $oPrevAttachment,
+					);
+				}
+			}
+		}
+		foreach($oEmail->aAttachments as $aAttachment)
+		{
+			$bIgnoreAttachment =false;
+			// First check if the type is allowed as an attachment...
+			if (self::$aExcludeAttachments == null)
+			{
+				self::$aExcludeAttachments = MetaModel::GetModuleSetting('combodo-email-synchro', 'exclude_attachment_types', array());
+			}
+			if (!in_array($aAttachment['mimeType'], self::$aExcludeAttachments))
+			{
+				if ($this->IsImage($aAttachment['mimeType']))
+				{
+					$aImgInfo = array();
+					if (((self::$iMinImageWidth > 0) || (self::$iMaxImageWidth > 0)) && (($aImgInfo = $this->GetImageSize($aAttachment['content'], $aImgInfo)) !== false))
+					{
+						$iWidth = $aImgInfo[0];
+						$iHeight = $aImgInfo[1];
+						if (($iWidth < self::$iMinImageWidth) || ($iHeight < self::$iMinImageHeight))
+						{
+							$bIgnoreAttachment = true;
+							$aIgnoredAttachments[$aAttachment['content-id']] = true;
+							MailInboxesEmailProcessor::Trace("Info: attachment '{$aAttachment['filename']}': $iWidth x $iHeight px rejected because it is too small (probably a signature). The minimum size is configured to ".self::$iMinImageWidth." x ".self::$iMinImageHeight." px");
+						}
+						else if ((self::$iMaxImageWidth > 0) && (($iWidth > self::$iMaxImageWidth) || ($iHeight > self::$iMaxImageHeight)))
+						{
+							MailInboxesEmailProcessor::Trace("Info: attachment '{$aAttachment['filename']}': $iWidth x $iHeight px will be resized to fit into ".self::$iMaxImageWidth." x ".self::$iMaxImageHeight." px");
+							$aAttachment = self::ResizeImageToFit($aAttachment, $iWidth, $iHeight, self::$iMaxImageWidth, self::$iMaxImageHeight);
+						}
+					}
+				}
+				if (!$bIgnoreAttachment && $bNoDuplicates)
+				{
+					// Check if an attachment with the same name/type/size/md5 already exists
+					$iSize = strlen($aAttachment['content']);
+					if ($iSize > $this->iMaxAttachmentSize)
+					{
+						// The attachment is too big, reject it, and replace it by a text message, explaining what happened
+						$aAttachment = $this->RejectBigAttachment($aAttachment, $oTicket);
+						$aRejectedAttachments[] = $aAttachment['content'];
+						MailInboxesEmailProcessor::Trace("Info: attachment '{$aAttachment['filename']}' too big (size = $iSize > max size = {$this->iMaxAttachmentSize} bytes)");
+					}
+					else
+					{
+						$sMd5 = md5($aAttachment['content']);
+						foreach($aPreviousAttachments as $aPrevious)
+						{
+							if (($aAttachment['filename'] == $aPrevious['filename']) &&
+							    ($aAttachment['mimeType'] == $aPrevious['mimeType']) &&
+							    ($iSize == $aPrevious['size']) &&
+							    ($sMd5 == $aPrevious['md5']) )
+							{
+								// Skip this attachment
+								MailInboxesEmailProcessor::Trace("Info: attachment {$aAttachment['filename']} skipped, already attached to the ticket.");
+								$aAddedAttachments[$aAttachment['content-id']] = $aPrevious['object']; // Still remember it for processing inline images
+								$bIgnoreAttachment = true;
+								break;
+							}
+						}
+					}
+				}
+				if (!$bIgnoreAttachment && $this->ContainsViruses($aAttachment))
+				{
+					// Skip this attachment
+					MailInboxesEmailProcessor::Trace("Info: attachment {$aAttachment['filename']} is reported as containing a virus, skipped.");
+					$aRejectedAttachments[] = "attachment {$aAttachment['filename']} was reported as containing a virus, it has been skipped.";
+					$bIgnoreAttachment = true;
+				}
+				if (!$bIgnoreAttachment)
+				{
+					if (class_exists('InlineImage') && $aAttachment['inline'])
+					{
+						//AIT 03102017 DBX : debut modification problème pdf en pièces jointes
+						if(preg_match("/(.pdf|.csv|.tif|.zip|.rar|.eml|.htm|.html|.doc|.docx|.odt|.xls|.xlsx|.ods)$/i", $aAttachment['filename']))
+						{
+							MailInboxesEmailProcessor::Trace("Info: email attachment {$aAttachment['filename']} will be stored as an Attachment.");
+							MailInboxesEmailProcessor::Trace("Info: correction dbx attachments.");
+							$oAttachment = new Attachment();
+						}
+						else
+						{
+							$oAttachment = new InlineImage();
+							MailInboxesEmailProcessor::Trace("Info: email attachment {$aAttachment['filename']} will be stored as an InlineImage.");
+							MailInboxesEmailProcessor::Trace("Info: correction dbx inline.");
+							$oAttachment->Set('secret', sprintf ('%06x', mt_rand(0, 0xFFFFFF))); // something not easy to guess
+						}	
+						//AIT 03102017 DBX : fin modification problème pdf en pièces jointes
+					}
+					else
+					{
+						MailInboxesEmailProcessor::Trace("Info: email attachment {$aAttachment['filename']} will be stored as an Attachment.");
+						$oAttachment = new Attachment();
+					}
+					if ($oTicket->IsNew())
+					{
+						$oAttachment->Set('item_class', get_class($oTicket));
+					}
+					else
+					{
+						$oAttachment->SetItem($oTicket);
+					}
+					$oBlob = new ormDocument($aAttachment['content'], $aAttachment['mimeType'], $aAttachment['filename']);
+					$oAttachment->Set('contents', $oBlob);
+					$oAttachment->DBInsert();
+					$oMyChangeOp = MetaModel::NewObject("CMDBChangeOpPlugin");
+					$oMyChange = CMDBObject::GetCurrentChange();
+					$oMyChangeOp->Set("change", $oMyChange->GetKey());
+					$oMyChangeOp->Set("objclass", get_class($oTicket));
+					$oMyChangeOp->Set("objkey", $oTicket->GetKey());
+					$oMyChangeOp->Set("description", Dict::Format('Attachments:History_File_Added', $aAttachment['filename']));
+					$iId = $oMyChangeOp->DBInsertNoReload();
+					MailInboxesEmailProcessor::Trace("Info: Attachment {$aAttachment['filename']} added to the ticket.");
+					$aAddedAttachments[$aAttachment['content-id']] = $oAttachment;
+				}
+			}
+			else
+			{
+				MailInboxesEmailProcessor::Trace("Info: The attachment {$aAttachment['filename']} was NOT added to the ticket because its type '{$aAttachment['mimeType']}' is excluded according to the configuration");
+			}
+		}
+		if (count($aRejectedAttachments) > 0)
+		{
+			// Report the problem to the administrator...
+			$this->HandleError($oEmail, 'rejected_attachments', null, implode("\n", $aRejectedAttachments));
+		}
+		
+		return $aAddedAttachments;
+	}]]></code>	
+		</method>
+      </methods>
+    </class>
+    <class id="MailInboxStandard" _created_in="itop-standard-email-synchro" _delta="must_exist">
+      <fields>
+        <field id="target_class" xsi:type="AttributeEnum" _delta="must_exist">
+          <values _delta="redefine">
+            <value id="Incident">Incident</value>
+            <value id="UserRequest">UserRequest</value>
+            <value id="noclassxyz">noclassxyz</value>
+          </values>
+        </field>
+        <field id="mailinboxruless_list" xsi:type="AttributeLinkedSet" _delta="define">
+          <linked_class>MailInboxRules</linked_class>
+          <ext_key_to_me>mailinboxstandard_id</ext_key_to_me>
+          <tracking_level/>
+          <edit_mode>in_place</edit_mode>
+          <label>Liste de règle(s)</label>
+        </field>
+      </fields>
+      <methods>
+        <method id="CreateTicketFromEmail" _delta="redefine">
+          <code><![CDATA[ 
+		  		  public function CreateTicketFromEmail(EmailMessage $oEmail, Contact $oCaller)
+  {
+    // In case of error (exception...) set the behavior
+    if ($this->Get('error_behavior') == 'delete')
+    {
+      $this->SetNextAction(EmailProcessor::DELETE_MESSAGE); // Remove the message from the mailbox
+    }
+    else
+    {
+      $this->SetNextAction(EmailProcessor::MARK_MESSAGE_AS_ERROR); // Keep the message in the mailbox, but marked as error
+    }
+    $this->Trace("Creating a new Ticket from eMail '".$oEmail->sSubject."'");
+	//Test si existence d'une règle à appliquer sur l'email
+	$ruleExist=$this->UseRuleMailInbox($oEmail,$oCaller);
+
+    if (!MetaModel::IsValidClass($this->Get('target_class')))
+    {
+      throw new Exception('Invalid "ticket_class" configured: "'.$this->Get('target_class').'" is not a valid class. Cannot create such an object.');
+    }
+    $oTicket = MetaModel::NewObject($this->Get('target_class'));
+    $oTicket->Set('org_id', $oCaller->Get('org_id'));
+	//Récupération de l'organisation destinataire du mail
+	$oOrgaDest=$this->GetOrgaDestinataire($oEmail);
+	$oTicket->Set('email_recipient', $oOrgaDest->Get('ns_emailorga'));
+	
+	//Récupération de l'organisation de l'expediteur du mail
+	$oOrgaCaller=$this->GetCallerOrga($oCaller);
+	
+	//récupération de l'operateur a affecter
+	$oResponsable=$this->GetResponsable($oOrgaDest,$oOrgaCaller);
+	
+	//récupération de l'équipe a affecter
+	$oTeam=$this->GetTeamFromPerson($oResponsable);
+	
+	//$oTicket->Set('email_recipient', $oEmail->sRecipient);
+	$this->Trace("Fetching organization".$oEmail->sRecipient);
+    if (MetaModel::IsValidAttCode(get_class($oTicket), 'caller_id'))
+    {
+      $oTicket->Set('caller_id', $oCaller->GetKey());
+    }
+    if (MetaModel::IsValidAttCode(get_class($oTicket), 'origin'))
+    {
+      $oTicket->Set('origin', 'mail');
+    }
+    if ($oEmail->sSubject == '')
+    {
+      $sDefaultSubject = ($this->Get('ticket_default_title') == '') ? Dict::S('MailInbox:NoSubject') : $this->Get('ticket_default_title');
+      $this->Trace("The incoming email has no subject, the ticket's title will be set to: '$sDefaultSubject'");
+      $oTicket->Set('title', $sDefaultSubject);
+    }
+    else
+    {
+      $oAttDef = MetaModel::GetAttributeDef(get_class($oTicket), 'title');
+      $iMaxSize = $oAttDef->GetMaxSize();
+      $oTicket->Set('title', substr($oEmail->sSubject, 0, $iMaxSize));
+    }
+
+    $aIgnoredAttachments = array();
+
+    // Insert the remaining attachments so that we know their ID and can reference them in the message's body
+    $aAddedAttachments = $this->AddAttachments($oTicket, $oEmail, true, $aIgnoredAttachments);  // Cannot insert them for real since the Ticket is not saved yet (we don't know its ID)
+                                                  // we'll have to call UpdateAttachments once the ticket is properly saved
+    $oAttDef = MetaModel::GetAttributeDef(get_class($oTicket), 'description');
+    $bForPlainText = true; // Target format is plain text (by default)
+    if ($oAttDef instanceof AttributeHTML)
+    {
+      // Target format is HTML
+      $bForPlainText = false;
+    }
+    else if ($oAttDef instanceof AttributeText)
+    {
+      $aParams = $oAttDef->GetParams();
+      if (array_key_exists('format', $aParams) && ($aParams['format'] == 'html'))
+      {
+        // Target format is HTML
+        $bForPlainText = false;
+      }
+    }
+    $this->Trace("Target format for 'description': ".($bForPlainText ? 'text/plain' : 'text/html'));
+    $this->Trace("Email body format: ".$oEmail->sBodyFormat);
+
+    $sTicketDescription = $this->BuildDescription($oEmail, $aAddedAttachments, $aIgnoredAttachments, $bForPlainText);
+
+    $iMaxSize = $oAttDef->GetMaxSize();
+    $bTextTruncated = false;
+    if (strlen($sTicketDescription) > $iMaxSize)
+    {
+      $oEmail->aAttachments[] = array('content' => $sTicketDescription, 'filename' => ($bForPlainText ? 'original message.txt' : 'original message.html'), 'mimeType' => ($bForPlainText ? 'text/plain' : 'text/html'));
+    }
+
+    $oTicket->Set('description', $this->FitTextIn($sTicketDescription, $iMaxSize - 1000)); // Keep some room just in case...
+
+    // Default values
+    $sDefaultValues = $this->Get('ticket_default_values');
+    $aDefaults = explode("\n", $sDefaultValues);
+    $aDefaultValues = array();
+    foreach($aDefaults as $sLine)
+    {
+      if (preg_match('/^([^:]+):(.*)$/', $sLine, $aMatches))
+      {
+        $sAttCode = trim($aMatches[1]);
+        $sValue = trim($aMatches[2]);
+        $aDefaultValues[$sAttCode] = $sValue;
+      }
+    }
+    $this->InitObjectFromDefaultValues($oTicket, $aDefaultValues);
+
+    if (($this->Get('import_additional_contacts') == 'always') || ($this->Get('import_additional_contacts') == 'only_on_creation'))
+    {
+      $this->AddAdditionalContacts($oTicket, $oEmail);
+    }
+	//test si equipe d'affectation de operateur  est litige
+	if(($oTeam->Get('name')!='Litige')or (($oTeam->Get('name')=='Litige') and !$ruleExist)){
+		$this->Trace("Ticket affectation en cours aucune règle.".$oTeam->GetName()."++".$oResponsable->GetName());
+		$oTicket->Set('team_id',$oTeam->GetKey());
+		$oTicket->Set('agent_id',$oResponsable->GetKey());
+	}
+		
+	
+		
+    $this->BeforeInsertTicket($oTicket, $oEmail, $oCaller);
+    $oTicket->DBInsert();
+    $this->Trace("Ticket ".$oTicket->GetName()." created.");
+    $this->AfterInsertTicket($oTicket, $oEmail, $oCaller, $aAddedAttachments);
+
+    return $oTicket;
+  }
+		  ]]></code>
+        </method>
+		<method id="UseRuleMailInbox" _delta="define">
+				  <code><![CDATA[ protected function UseRuleMailInbox(EmailMessage $oEmail, Contact $oCaller)
+					{
+						//Reset Default Values
+						$this->Set('ticket_default_values', "");
+						$this->Trace("Reset Default Values");
+						//Defining the query to get rules associated to a mailbox
+
+						$sRuleQuery = 'SELECT MailInboxRules WHERE mailinboxstandard_id=:rule';
+
+						//Executing previous query
+
+						$oRuleRequestSet = new DBObjectSet(DBObjectSearch::FromOQL($sRuleQuery),
+								  array(
+									'rank' => true,
+									),
+								  array(
+									'rule' => $this->GetKey(),
+									)
+								  );
+						//Fetching each rules returned by previous query
+						$exist=0;
+						while($oRule = $oRuleRequestSet->Fetch())
+						{
+							//As rules were returned ordered by ascending, rules are checked in the following order 0,1,2,3 etc...
+							//Checking the type of a rule first
+
+							if($oRule->Get('rule_type') == 'Domain') {
+							   if(strpos($oEmail->sCallerEmail, $oRule->Get('regex')) !== false)
+							   {
+								  $this->Trace("Rule n° ".$oRule->Get('rank')." (".$oRule->Get('displayname').") is a match ! Creating a ".$this->Get('target_class')." ticket ");
+
+								  //Using MailInboxStandard as a placeholder instead of redifining all values to the rule's one
+								  $this->Set('ticket_default_values', $oRule->Get('ticket_default_values'));
+								  $exist=1;
+								  return $exist;
+							   }
+							}
+							else {
+							  if(preg_match($oRule->Get('regex'), $oEmail->sSubject)) {
+								$this->Trace("Rule n° ".$oRule->Get('rank')." (".$oRule->Get('displayname').") is a match ! Creating a ".$this->Get('target_class')." ticket ");
+
+								//Using MailInboxStandard as a placeholder instead of redifining all values to the rule's one
+								$this->Set('ticket_default_values', $oRule->Get('ticket_default_values'));
+								$exist=1;
+								return $exist;
+							  }
+							}
+						}
+					}
+		  ]]></code>
+        </method>
+		<method id="GetOrgaDestinataire" _delta="define_if_not_exists">
+				  <code><![CDATA[ protected function GetOrgaDestinataire(EmailMessage $oEmail){
+					$oOrgSearch = DBSearch::FromOQL("SELECT Organization");
+					$oOrgSet = new DBObjectSet($oOrgSearch);
+					//Fetching each organization returned by previous query
+					$this->Trace("Fetching organization".$oOrgSet->Count());
+
+					while($oOrganization = $oOrgSet->Fetch())
+					{
+						$bOrgFound = false;
+						foreach($oEmail->aTos as &$value) {
+							if($value[email] == $oOrganization->Get('ns_emailorga')) { 
+								$bOrgFound = true;
+								break;
+							}
+						}
+						if($bOrgFound) {
+							break;
+						}
+					}	
+					return  $oOrganization;
+				}
+		  ]]></code>
+        </method>
+        
+      </methods>
+      <presentation>
+        <details _delta="redefine">
+          <items>
+            <item id="col:col0">
+              <items>
+                <item id="fieldset:MailInbox:Server">
+                  <items>
+                    <item id="server">
+                      <rank>10</rank>
+                    </item>
+                    <item id="login">
+                      <rank>20</rank>
+                    </item>
+                    <item id="password">
+                      <rank>30</rank>
+                    </item>
+                    <item id="protocol">
+                      <rank>40</rank>
+                    </item>
+                    <item id="port">
+                      <rank>50</rank>
+                    </item>
+                    <item id="mailbox">
+                      <rank>60</rank>
+                    </item>
+                    <item id="active">
+                      <rank>70</rank>
+                    </item>
+                    <item id="trace">
+                      <rank>80</rank>
+                    </item>
+                  </items>
+                  <rank>10</rank>
+                </item>
+                <item id="fieldset:MailInbox:Errors">
+                  <items>
+                    <item id="error_behavior">
+                      <rank>10</rank>
+                    </item>
+                    <item id="notify_errors_to">
+                      <rank>20</rank>
+                    </item>
+                    <item id="notify_errors_from">
+                      <rank>30</rank>
+                    </item>
+                  </items>
+                  <rank>20</rank>
+                </item>
+              </items>
+              <rank>10</rank>
+            </item>
+            <item id="col:col1">
+              <items>
+                <item id="fieldset:MailInbox:Behavior">
+                  <items>
+                    <item id="behavior">
+                      <rank>10</rank>
+                    </item>
+                    <item id="email_storage">
+                      <rank>20</rank>
+                    </item>
+                    <item id="target_class">
+                      <rank>30</rank>
+                    </item>
+                    <item id="ticket_default_title">
+                      <rank>40</rank>
+                    </item>
+                    <item id="stimuli">
+                      <rank>50</rank>
+                    </item>
+                  </items>
+                  <rank>10</rank>
+                </item>
+                <item id="fieldset:MailInbox:Caller">
+                  <items>
+                    <item id="unknown_caller_behavior">
+                      <rank>10</rank>
+                    </item>
+                    <item id="caller_default_values">
+                      <rank>20</rank>
+                    </item>
+                  </items>
+                  <rank>20</rank>
+                </item>
+                <item id="fieldset:MailInbox:OtherContacts">
+                  <items>
+                    <item id="import_additional_contacts">
+                      <rank>10</rank>
+                    </item>
+                  </items>
+                  <rank>30</rank>
+                </item>
+              </items>
+              <rank>20</rank>
+            </item>
+            <item id="mailinboxruless_list">
+              <rank>30</rank>
+            </item>
+          </items>
+        </details>
+      </presentation>
+    </class>
+    <class id="MailInboxRules" _created_in="itop-standard-email-synchro" _delta="define">
+      <properties>
+        <category>bizmodel,searchable</category>
+        <abstract>false</abstract>
+        <db_table>mailinboxrules</db_table>
+        <icon>
+          <fileref ref="applicationservice_481d3d9d8aa794e65ba40ea5d4f727be"/>
+        </icon>
+        <reconciliation>
+          <attributes>
+            <attribute id="regex"/>
+          </attributes>
+        </reconciliation>
+      </properties>
+      <fields>
+        <field id="regex" xsi:type="AttributeString">
+          <sql>regex</sql>
+          <default_value/>
+          <is_null_allowed>false</is_null_allowed>
+          <validation_pattern/>
+        </field>
+        <field id="rule_type" xsi:type="AttributeEnum">
+          <sql>rule_type</sql>
+          <values>
+            <value id="Subject">Subject</value>
+            <value id="Domain">Domain</value>
+          </values>
+          <default_value>Subject</default_value>
+          <is_null_allowed>false</is_null_allowed>
+          <display_style>list</display_style>
+          <dependencies/>
+        </field>
+        <field id="ticket_default_values" xsi:type="AttributeText">
+          <sql>ticket_default_values</sql>
+          <default_value/>
+          <is_null_allowed>true</is_null_allowed>
+          <validation_pattern/>
+          <width/>
+          <height/>
+        </field>
+        <field id="mailinboxstandard_id" xsi:type="AttributeExternalKey">
+          <sql>mailinboxstandard_id</sql>
+          <filter/>
+          <dependencies/>
+          <is_null_allowed>true</is_null_allowed>
+          <target_class>MailInboxStandard</target_class>
+          <on_target_delete>DEL_AUTO</on_target_delete>
+          <label>Boite mail associé</label>
+        </field>
+        <field id="displayname" xsi:type="AttributeString">
+          <sql>displayname</sql>
+          <default_value/>
+          <is_null_allowed>false</is_null_allowed>
+          <validation_pattern/>
+        </field>
+        <field id="rank" xsi:type="AttributeInteger">
+          <sql>rank</sql>
+          <default_value>0</default_value>
+          <is_null_allowed>false</is_null_allowed>
+        </field>
+      </fields>
+      <methods/>
+      <presentation>
+        <list>
+          <items/>
+        </list>
+        <search>
+          <items>
+            <item id="displayname">
+              <rank>10</rank>
+            </item>
+            <item id="regex">
+              <rank>20</rank>
+            </item>
+            <item id="rule_type">
+              <rank>30</rank>
+            </item>
+            <item id="ticket_default_values">
+              <rank>40</rank>
+            </item>
+            <item id="mailinboxstandard_id">
+              <rank>50</rank>
+            </item>
+            <item id="rank">
+              <rank>60</rank>
+            </item>
+          </items>
+        </search>
+        <details>
+          <items>
+            <item id="col:col0">
+              <items>
+                <item id="displayname">
+                  <rank>10</rank>
+                </item>
+                <item id="regex">
+                  <rank>20</rank>
+                </item>
+                <item id="rule_type">
+                  <rank>30</rank>
+                </item>
+                <item id="ticket_default_values">
+                  <rank>40</rank>
+                </item>
+              </items>
+              <rank>10</rank>
+            </item>
+            <item id="mailinboxstandard_id">
+              <rank>20</rank>
+            </item>
+            <item id="rank">
+              <rank>30</rank>
+            </item>
+          </items>
+        </details>
+      </presentation>
+      <parent>cmdbAbstractObject</parent>
+    </class>
+  </classes>
+  <dictionaries>
+    <dictionary id="FR FR" _delta="must_exist">
+      <entries>
+        <entry id="Class:MailInboxStandard/Attribute:target_class" _delta="redefine"><![CDATA[Type de ticket par défaut]]></entry>
+        <entry id="Class:MailInboxRules" _delta="define"><![CDATA[MailInboxRules]]></entry>
+        <entry id="Class:MailInboxRules+" _delta="define"><![CDATA[]]></entry>
+        <entry id="Class:MailInboxRules/Attribute:regex" _delta="define"><![CDATA[Regex ou domaine]]></entry>
+        <entry id="Class:MailInboxRules/Attribute:regex+" _delta="define"><![CDATA[]]></entry>
+        <entry id="Class:MailInboxRules/Attribute:rule_type" _delta="define"><![CDATA[Type de règle]]></entry>
+        <entry id="Class:MailInboxRules/Attribute:rule_type+" _delta="define"><![CDATA[]]></entry>
+        <entry id="Class:MailInboxRules/Attribute:rule_type/Value:Subject" _delta="define"><![CDATA[Sujet]]></entry>
+        <entry id="Class:MailInboxRules/Attribute:rule_type/Value:Domain" _delta="define"><![CDATA[Domaine]]></entry>
+        <entry id="Class:MailInboxRules/Attribute:ticket_default_values" _delta="define"><![CDATA[Valeur par default du ticket]]></entry>
+        <entry id="Class:MailInboxRules/Attribute:ticket_default_values+" _delta="define"><![CDATA[]]></entry>
+        <entry id="Class:lnkMailInboxRulesToMailInboxStandard/Name" _delta="define"><![CDATA[%1$s - %2$s]]></entry>
+        <entry id="Class:MailInboxStandard/Attribute:mailinboxruless_list" _delta="define"><![CDATA[Liste de règle(s)]]></entry>
+        <entry id="Class:MailInboxStandard/Attribute:mailinboxruless_list+" _delta="define"><![CDATA[]]></entry>
+        <entry id="Class:MailInboxRules/Attribute:name" _delta="define"><![CDATA[Nom]]></entry>
+        <entry id="Class:MailInboxRules/Attribute:name+" _delta="define"><![CDATA[]]></entry>
+        <entry id="Class:MailInboxRules/Attribute:mailinboxstandard_id" _delta="define"><![CDATA[Boite mail associé]]></entry>
+        <entry id="Class:MailInboxRules/Attribute:mailinboxstandard_id+" _delta="define"><![CDATA[]]></entry>
+        <entry id="Class:MailInboxRules/Attribute:displayname" _delta="define"><![CDATA[Nom de la règle]]></entry>
+        <entry id="Class:MailInboxRules/Attribute:displayname+" _delta="define"><![CDATA[]]></entry>
+        <entry id="Class:MailInboxRules/Attribute:rank" _delta="define"><![CDATA[Ordre]]></entry>
+        <entry id="Class:MailInboxRules/Attribute:rank+" _delta="define"><![CDATA[]]></entry>
+        <entry id="Class:MailInboxStandard/Attribute:target_class/Value:noclassxyz" _delta="define"><![CDATA[Pas de ticket]]></entry>
+      </entries>
+    </dictionary>
+  </dictionaries>
+  <files>
+    <file id="applicationservice_481d3d9d8aa794e65ba40ea5d4f727be" xsi:type="File" _delta="define_if_not_exists">
+      <name>images/applicationservice.png</name>
+      <mime_type>image/png</mime_type>
+      <width>48</width>
+      <height>48</height>
+      <data>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</data>
+    </file>
+  </files>
+</itop_design>
