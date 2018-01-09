@@ -38,7 +38,7 @@ SetupWebPage::AddModule(
 			'main.ait-select-notified.php'
 		),
 		'webservice' => array(
-			
+
 		),
 		'data.struct' => array(
 			// add your 'structure' definition XML files here,
@@ -46,16 +46,17 @@ SetupWebPage::AddModule(
 		'data.sample' => array(
 			// add your sample data XML files here,
 		),
-		
+
 		// Documentation
 		//
 		'doc.manual_setup' => '', // hyperlink to manual setup documentation, if any
-		'doc.more_information' => '', // hyperlink to more information, if any 
+		'doc.more_information' => '', // hyperlink to more information, if any
 
 		// Default settings
 		//
 		'settings' => array(
-			// Module specific settings go here, if any
+			'classToApply' => '../csv_web_form', //Which type of ticket you can chose who will get the mail
+			'fieldForRegEx' => 'escalation_reason',
 		),
 	)
 );

@@ -1,68 +1,35 @@
 <?php
-// Copyright (C) 2010 Combodo SARL
-//
-//   This program is free software; you can redistribute it and/or modify
-//   it under the terms of the GNU General Public License as published by
-//   the Free Software Foundation; version 3 of the License.
-//
-//   This program is distributed in the hope that it will be useful,
-//   but WITHOUT ANY WARRANTY; without even the implied warranty of
-//   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-//   GNU General Public License for more details.
-//
-//   You should have received a copy of the GNU General Public License
-//   along with this program; if not, write to the Free Software
-//   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-
-
 /**
- * Module precanned-replies
- *
- * @author      Erwan Taloc <erwan.taloc@combodo.com>
- * @author      Romain Quetiez <romain.quetiez@combodo.com>
- * @author      Denis Flaven <denis.flaven@combodo.com>
- * @license     http://www.opensource.org/licenses/gpl-3.0.html LGPL
- */
-
-/**
- * Pre-defined replies for fast answer to helpdesk tickets
- *
- * @author      Erwan Taloc <erwan.taloc@combodo.com>
- * @author      Romain Quetiez <romain.quetiez@combodo.com>
- * @author      Denis Flaven <denis.flaven@combodo.com>
- * @license     http://www.opensource.org/licenses/gpl-3.0.html LGPL
- */
-
-
-// Declare a class that implements iBackgroundProcess (will be called by the CRON)
-// Extend the class AsyncTask to create a queue of asynchronous tasks (process by the CRON)
-// Declare a class that implements iApplicationUIExtension (to tune object display and edition form)
-// Declare a class that implements iApplicationObjectExtension (to tune object read/write rules)
+* Module ait-select-notified
+*
+* @author      Raphaël Saget <r.saget@axelit.fr>
+* @author      David Bontoux <d.bontoux@axelit.fr>
+*/
 
 class SelectNotifiedPlugin implements iApplicationUIExtension, iApplicationObjectExtension
 {
 	public function OnDisplayProperties($oObject, WebPage $oPage, $bEditMode = false)
 	{
-		if ($bEditMode && !$oObject->IsNew())
+		if (get_class($oObject) == MetaModel::GetConfig()->GetModuleSetting('ait-select-notified', 'classToApply', '') && $bEditMode && !$oObject->IsNew())
 		{
 			$sModuleUrl = utils::GetAbsoluteUrlModulesRoot().'ait-select-notified/';
 			$oPage->add_linked_script($sModuleUrl.'ait-select-notified.js');
 			$oTicketRequestSet = new DBObjectSet(DBObjectSearch::FromOQL('SELECT Ticket WHERE id = :id'),
-              array(),
-              array(
-                'id' => utils::ReadParam('id', ''),
-              ));
+			array(),
+			array(
+				'id' => utils::ReadParam('id', ''),
+			));
 			$oTicket = $oTicketRequestSet->Fetch();
 			$oPersonRequestSet = new DBObjectSet(DBObjectSearch::FromOQL('SELECT Person WHERE id = :id'),
-              array(),
-              array(
-                'id' => $oTicket->Get('caller_id'),
-              ));
+			array(),
+			array(
+				'id' => $oTicket->Get('caller_id'),
+			));
 			$oPerson = $oPersonRequestSet->Fetch();
 
 			$sCallerMail = $oPerson->Get('email');
 
-			$oPage->add_ready_script("$('#field_2_public_log div.caselog_input_header').append('<div id=\"select_sender\"><label>Destinataire : <select onChange=\"OnSelectNotified(this.value,".utils::ReadParam('id', '').")\"><option value=\"Patient\">Patient</option><option value=\"Clinique\">Clinique</option><option value=\"Prestataire\">Prestataire</option></select></label><span id=\"v_notified\"><label><input type=\"checkbox\" checked value=\"yes\">".$sCallerMail."</label></span></div>');");
+			$oPage->add_ready_script("$('#field_2_public_log div.caselog_input_header').append('<div id=\"select_sender\"><label>Destinataire : <select onChange=\"OnSelectNotified(this.value,".utils::ReadParam('id', '').")\"><option value=\"Patient\">Patient</option><option value=\"Clinique\">Clinique</option><option value=\"Prestataire\">Prestataire</option></select></label><span id=\"v_notified\"><label><input type=\"checkbox\" name=\"listmail[".$sCallerMail."]\" checked value=\"yes\">".$sCallerMail."</label></span></div>');");
 		}
 	}
 
@@ -72,9 +39,31 @@ class SelectNotifiedPlugin implements iApplicationUIExtension, iApplicationObjec
 
 	public function OnFormSubmit($oObject, $sFormPrefix = '')
 	{
-		var_dump($oObject);
+		if(get_class($oObject) == MetaModel::GetConfig()->GetModuleSetting('ait-select-notified', 'classToApply', '')){
+			//error_log(print_r($_POST,true));
+			$aListmail = Utils::ReadParam('listmail','');
+			$sRegExMail = '';
+			$nCount = 0;
+
+			foreach($aListmail as $mail =>  $key){
+				if($key ==  "yes")  {
+					$sRegExMail .= $mail."|";
+					$nCount += 1;
+				}
+			}
+
+			$sRegExMail = substr($sRegExMail,0,-1);
+
+			if(MetaModel::IsValidAttCode(get_class($oObject), MetaModel::GetConfig()->GetModuleSetting('ait-select-notified', 'fieldForRegEx', ''))) {
+				if($nCount > 0) {
+					$oObject->set(MetaModel::GetConfig()->GetModuleSetting('ait-select-notified', 'fieldForRegEx', ''), $sRegExMail);
+				} else {
+					$oObject->set(MetaModel::GetConfig()->GetModuleSetting('ait-select-notified', 'fieldForRegEx', ''), "rand.mail@foo_bar.xyz");
+				}
+			}
+		}
 	}
-	
+
 	public function OnFormCancel($sTempId)
 	{
 	}
@@ -92,7 +81,7 @@ class SelectNotifiedPlugin implements iApplicationUIExtension, iApplicationObjec
 	public function GetHilightClass($oObject)
 	{
 		// Possible return values are:
-		// HILIGHT_CLASS_CRITICAL, HILIGHT_CLASS_WARNING, HILIGHT_CLASS_OK, HILIGHT_CLASS_NONE	
+		// HILIGHT_CLASS_CRITICAL, HILIGHT_CLASS_WARNING, HILIGHT_CLASS_OK, HILIGHT_CLASS_NONE
 		return HILIGHT_CLASS_NONE;
 	}
 
@@ -100,7 +89,7 @@ class SelectNotifiedPlugin implements iApplicationUIExtension, iApplicationObjec
 	{
 		// No action
 		return array();
-    }
+	}
 
 	public function OnIsModified($oObject)
 	{
@@ -119,15 +108,15 @@ class SelectNotifiedPlugin implements iApplicationUIExtension, iApplicationObjec
 
 	public function OnDBUpdate($oObject, $oChange = null)
 	{
+
 	}
-	
+
 	public function OnDBInsert($oObject, $oChange = null)
 	{
 	}
-	
+
 	public function OnDBDelete($oObject, $oChange = null)
-	{	
+	{
 	}
 
 }
-

@@ -11,7 +11,7 @@ try
 {
 	require_once(APPROOT.'/application/startup.inc.php');
 	require_once(APPROOT.'/application/user.preferences.class.inc.php');
-	
+
 	require_once(APPROOT.'/application/loginwebpage.class.inc.php');
 	//LoginWebPage::DoLogin(false /* bMustBeAdmin */, false /* IsAllowedToPortalUsers */); // Check user rights and prompt if needed
 	$sTicketID = utils::ReadParam('id', '');
@@ -36,7 +36,7 @@ try
 		while($oContact = $oClinicalRequestSet->Fetch()) {
 			if($oContact->Get('email') != "") {
 				//array_push($aContact, $oContact->Get('email'));
-				$sHTML = $sHTML."<label><input type=\"checkbox\" checked value=\"yes\">".$oContact->Get('email')."</label>";
+				$sHTML = $sHTML."<label><input type=\"checkbox\" name=\"listmail[".$oContact->Get('email')."]\" checked value=\"yes\">".$oContact->Get('email')."</label>";
 			}
 		}
 	}
@@ -57,7 +57,36 @@ try
 		$oPerson = $oPersonRequestSet->Fetch();
 		$sCallerMail = $oPerson->Get('email');
 
-		$sHTML = $sHTML."<label><input type=\"checkbox\" checked value=\"yes\">".$oPerson->Get('email')."</label>";
+		$sHTML = $sHTML."<label><input type=\"checkbox\" name=\"listmail[".$oPerson->Get('email')."]\" checked value=\"yes\">".$oPerson->Get('email')."</label>";
+	}
+	else if ($sNotified = "Prestataire") {
+		$oTicketRequestSet = new DBObjectSet(DBObjectSearch::FromOQL('SELECT Ticket WHERE id = :id'),
+              array(),
+              array(
+                'id' => $sTicketID,
+              ));
+
+		$oTicket = $oTicketRequestSet->Fetch();
+
+		$oOrgRequestSet =  new DBObjectSet(DBObjectSearch::FromOQL('SELECT Organization WHERE id = :id'),
+            array(),
+            array(
+                'id' => $oTicket->Get('org_id'),
+              ));
+
+		$oOrg = $oOrgRequestSet->Fetch();
+
+		$oContactRequestSet  =  new DBObjectSet(DBObjectSearch::FromOQL('SELECT Person WHERE org_id = :id'),
+            array(),
+            array(
+                'id' => $oOrg->Get('prestataire_id'),
+              ));
+
+		while($oContact = $oContactRequestSet->Fetch()) {
+			if($oContact->Get('email') != "") {
+				$sHTML = $sHTML."<label><input type=\"checkbox\" name=\"listmail[".$oContact->Get('email')."]\" checked value=\"yes\">".$oContact->Get('email')."</label>";
+			}
+		}
 	}
 
 	echo $sHTML;
@@ -69,7 +98,7 @@ try
 	/*
 	$oPage = new ajax_page("");
 	$oPage->no_cache();
-	
+
 	$sOperation = utils::ReadParam('operation', '');
 	$sLogAttCode = utils::ReadParam('log_attcode', '');
 
@@ -91,17 +120,17 @@ try
 		$sHTML .= "<input type=\"hidden\" id=\"count_precanned_select\" value=\"0\">";
 		$sHTML .= "</form>\n";
 		$sHTML .= '</div></div>';
-		
+
 		$oPage->add($sHTML);
 		$oPage->add_ready_script("$('#fs_precanned_select').bind('submit', function() {PrecannedDoSearch('$sLogAttCode'); return false;} );\n");
 		break;
-		
-		case 'search_precanned':	
+
+		case 'search_precanned':
 		$oFilter = new DBObjectSearch('PrecannedReply');
 		$oBlock = new DisplayBlock($oFilter, 'list', false);
 		$oBlock->Display($oPage, 'precanned_select_results', array('cssCount'=> '#count_precanned_select', 'menu' => false, 'selection_mode' => true, 'selection_type' => 'single')); // Don't display the 'Actions' menu on the results
 		break;
-		
+
 		case 'add_precanned':
 		$aSelected = utils::ReadParam('selected', '');
 
@@ -151,7 +180,7 @@ try
 		}
 		$oPage->add(json_encode($aResult));
 		break;
-		
+
 		default:
 		$oPage->add("Operation $sOperation no supported.");
 	}

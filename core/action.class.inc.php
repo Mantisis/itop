@@ -3,7 +3,7 @@
 //
 //   This file is part of iTop.
 //
-//   iTop is free software; you can redistribute it and/or modify	
+//   iTop is free software; you can redistribute it and/or modify
 //   it under the terms of the GNU Affero General Public License as published by
 //   the Free Software Foundation, either version 3 of the License, or
 //   (at your option) any later version.
@@ -29,7 +29,7 @@ require_once(APPROOT.'/core/asynctask.class.inc.php');
 require_once(APPROOT.'/core/email.class.inc.php');
 
 /**
- * A user defined action, to customize the application  
+ * A user defined action, to customize the application
  *
  * @package     iTopORM
  */
@@ -93,7 +93,7 @@ abstract class Action extends cmdbAbstractObject
 }
 
 /**
- * A notification  
+ * A notification
  *
  * @package     iTopORM
  */
@@ -126,7 +126,7 @@ abstract class ActionNotification extends Action
 }
 
 /**
- * An email notification  
+ * An email notification
  *
  * @package     iTopORM
  */
@@ -180,7 +180,7 @@ class ActionEmail extends ActionNotification
 	{
 		$sOQL = $this->Get($sRecipAttCode);
 		if (strlen($sOQL) == '') return '';
-
+		error_log(print_r($sOQL,true));
 		try
 		{
 			$oSearch = DBObjectSearch::FromOQL($sOQL);
@@ -288,19 +288,19 @@ class ActionEmail extends ActionNotification
 			$this->m_iRecipients = 0;
 			$this->m_aMailErrors = array();
 			$bRes = false; // until we do succeed in sending the email
-	
+
 			// Determine recicipients
 			//
 			$sTo = $this->FindRecipients('to', $aContextArgs);
 			$sCC = $this->FindRecipients('cc', $aContextArgs);
 			$sBCC = $this->FindRecipients('bcc', $aContextArgs);
-	
+
 			$sFrom = MetaModel::ApplyParams($this->Get('from'), $aContextArgs);
 			$sReplyTo = MetaModel::ApplyParams($this->Get('reply_to'), $aContextArgs);
-	
+
 			$sSubject = MetaModel::ApplyParams($this->Get('subject'), $aContextArgs);
 			$sBody = MetaModel::ApplyParams($this->Get('body'), $aContextArgs);
-			
+
 			$oObj = $aContextArgs['this->object()'];
 			$sMessageId = sprintf('iTop_%s_%d_%f@%s.openitop.org', get_class($oObj), $oObj->GetKey(), microtime(true /* get as float*/), MetaModel::GetEnvironmentId());
 			$sReference = '<'.$sMessageId.'>';
@@ -311,7 +311,7 @@ class ActionEmail extends ActionNotification
   			throw $e;
   		}
 		ApplicationContext::SetUrlMakerClass($sPreviousUrlMaker);
-		
+
 		if (!is_null($oLog))
 		{
 			// Note: we have to secure this because those values are calculated
@@ -389,10 +389,10 @@ class ActionEmail extends ActionNotification
 				{
 					case EMAIL_SEND_OK:
 						return "Sent";
-	
+
 					case EMAIL_SEND_PENDING:
 						return "Pending";
-	
+
 					case EMAIL_SEND_ERROR:
 						return "Errors: ".implode(', ', $aErrors);
 				}
