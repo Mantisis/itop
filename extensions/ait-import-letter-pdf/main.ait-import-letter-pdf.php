@@ -12,7 +12,7 @@
 class ImportPDFLetter implements iBackgroundProcess
 {
     public function GetPeriodicity()
-    {   
+    {
         return MetaModel::GetConfig()->GetModuleSetting('ait-import-letter-pdf', 'periodicity', '');
     }
 
@@ -48,7 +48,7 @@ class ImportPDFLetter implements iBackgroundProcess
                         if($aPathParts['extension'] === 'pdf') {
                             echo "Processing file : $sFile"."\n";
                             try {
-                                
+
                                 if($this->CreateTicketFromPDF($sFile, $sPath)) {
                                     $this->CleanAfterCreation($sFile, $sPath);
                                 }
@@ -56,7 +56,7 @@ class ImportPDFLetter implements iBackgroundProcess
                                 closedir($hDirHandler);
                                 return $e->GetMessage();
                             }
-                            $iProcessed++; 
+                            $iProcessed++;
                         }
                     }
                 closedir($hDirHandler);
@@ -82,7 +82,7 @@ class ImportPDFLetter implements iBackgroundProcess
 
         if ($oOrgRequestSet->Count() < 1) {
             throw new Exception("Error : Organization for contact not found ! Check configuration file.\n");
-        } 
+        }
 
         $oPerson->Set('org_id', MetaModel::GetConfig()->GetModuleSetting('ait-import-letter-pdf', 'org_id', ''));
 
@@ -96,10 +96,10 @@ class ImportPDFLetter implements iBackgroundProcess
 
         $oPerson = null;
         $oTicket = MetaModel::NewObject(MetaModel::GetConfig()->GetModuleSetting('ait-import-letter-pdf', 'ticket_type', ''));
-        
+
         $aFileInfo = pathinfo($sFile);
         $aPdfInfo = explode("_", $aFileInfo['filename']);
-        
+
         $oPersonRequestSet = new DBObjectSet(DBObjectSearch::FromOQL('SELECT Person WHERE name=:name'),
               array(),
               array(
@@ -110,11 +110,11 @@ class ImportPDFLetter implements iBackgroundProcess
             print("Contact not found, trying to create it...\n");
 
             try {
-                $oPerson = $this->CreatePersonFromPDF($aPdfInfo[2]); 
+                $oPerson = $this->CreatePersonFromPDF($aPdfInfo[2]);
             }
             catch(Exception $e) {
                 throw $e;
-            } 
+            }
         } else {
             $oPerson = $oPersonRequestSet->Fetch();
         }
@@ -140,6 +140,11 @@ class ImportPDFLetter implements iBackgroundProcess
             $oTicket->Set('description', ' ');
         }
 
+        if (MetaModel::IsValidAttCode(get_class($oTicket), 'origin'))
+        {
+            $oTicket->Set('origin', 'letter');
+        }
+
         $oOrgRequestSet = new DBObjectSet(DBObjectSearch::FromOQL('SELECT Organization WHERE name = :name'),
               array(),
               array(
@@ -148,7 +153,7 @@ class ImportPDFLetter implements iBackgroundProcess
 
         if ($oOrgRequestSet->Count() < 1) {
             throw new Exception("Error : Invalid organization for the ticket ! Check configuration file.");
-        } 
+        }
 
         $oOrganization = $oOrgRequestSet->Fetch();
 
@@ -187,13 +192,13 @@ class ImportPDFLetter implements iBackgroundProcess
         $oAttachment->Set('item_id', $sTicketID);
         $oAttachment->Set('item_org_id', $sTicketOrgID);
         $oAttachment->Set('contents', $oDoc);
-        
+
         try {
             $iAttId = $oAttachment->DBInsert();
         } catch(Exception $e) {
             throw $e;
         }
-            
+
         $aResult['msg'] = htmlentities($oDoc->GetFileName(), ENT_QUOTES, 'UTF-8');
         $aResult['icon'] = utils::GetAbsoluteUrlAppRoot().AttachmentPlugIn::GetFileIcon($oDoc->GetFileName());
         $aResult['att_id'] = $iAttId;
